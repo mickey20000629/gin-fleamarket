@@ -2,29 +2,57 @@ package main
 
 import (
 	"gin-fleamarket/controllers"
-	"gin-fleamarket/models"
+	"gin-fleamarket/infra"
+	"gin-fleamarket/middlewares"
+
+	// "gin-fleamarket/models"
 	"gin-fleamarket/repositries"
 	"gin-fleamarket/servicies"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
-func main() {
-	items := []models.Item{
-		{ID: 1, Name: "商品１", Price: 1000, Description: "説明１", SoldOut: false},
-		{ID: 2, Name: "商品2", Price: 2000, Description: "説明2", SoldOut: true},
-		{ID: 3, Name: "商品3", Price: 3000, Description: "説明3", SoldOut: false},
-	}
-
-	itemRepository := repositries.NewItemMemoryRepositry(items)
+func setupRouter(db *gorm.DB) *gin.Engine {
+	itemRepository := repositries.NewItemRepository(db)
 	itemService := servicies.NewItemService(itemRepository)
 	itemController := controllers.NewItemController(itemService)
 
+	authRepository := repositries.NewAuthRepository(db)
+	authService := servicies.NewAuthService(authRepository)
+	authController := controllers.NewAuthController(authService)
+
 	r := gin.Default()
-	r.GET("/items", itemController.FindAll)
-	r.GET("/items/:id", itemController.FindById)
-	r.POST("/items", itemController.Create)
-	r.PUT("/items/:id", itemController.Update)
-	r.DELETE("/items/:id", itemController.Delete)
+	r.Use(cors.Default())
+	itemRouter := r.Group("/items")
+	itemRouterWithAuth := r.Group("/items", middlewares.AuthMiddleware(authService))
+	authRouter := r.Group("/auth")
+
+	itemRouter.GET("", itemController.FindAll)
+	itemRouterWithAuth.GET("/:id", itemController.FindById)
+	itemRouterWithAuth.POST("", itemController.Create)
+	itemRouterWithAuth.PUT("/:id", itemController.Update)
+	itemRouterWithAuth.DELETE("/:id", itemController.Delete)
+
+	authRouter.POST("/signup", authController.Signup)
+	authRouter.POST("/login", authController.Login)
+
+	return r
+}
+
+func main() {
+	infra.Initialize()
+	db := infra.SetupDB()
+	r := setupRouter(db)
+
+	// items := []models.Item{
+	// 	{ID: 1, Name: "商品１", Price: 1000, Description: "説明１", SoldOut: false},
+	// 	{ID: 2, Name: "商品2", Price: 2000, Description: "説明2", SoldOut: true},
+	// 	{ID: 3, Name: "商品3", Price: 3000, Description: "説明3", SoldOut: false},
+	// }
+
+	// itemRepository := repositries.NewItemMemoryRepositry(items)
+
 	r.Run("localhost:8080") // 0.0.0.0:8080 でサーバーを立てます。
 }
